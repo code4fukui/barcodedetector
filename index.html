@@ -1,0 +1,141 @@
+
+<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>BarcodeDetector test</title>
+</head>
+
+<body>
+<h1>BarcodeDetector test</h1>
+<div class="container">
+  <video id="videoElement" playsinline style="display:none"></video>
+  <canvas id="canvas"></canvas>
+</div>
+<div class="ctrl">
+  <label><input type="checkbox" id="showimg" checked>show original image</label>
+  <!--<label><input type="checkbox" id="mirrormode" checked>mirror mode</label>-->
+  <label><input type="checkbox" id="backcameramode">backcamera mode</label><br>
+  <br>
+  supported format:<br>
+  <div id=divsupported></div>
+</div>
+<hr>
+<footer>
+src: <a href="https://google.github.io/mediapipe/solutions/face_mesh.html">Face Mesh - mediapipe</a><br>
+</footer>
+
+<script type="module">
+import { Camera } from "https://code4fukui.github.io/Camera/Camera.js";
+
+if (!window.BarcodeDetector) {
+  alert("BarcodeDetector is not supported on your browser!");
+}
+const formats = await BarcodeDetector.getSupportedFormats();
+divsupported.textContent = formats.join(", ");
+
+const detector = new BarcodeDetector();
+
+const g = canvas.getContext("2d");
+
+export const fillTextCenter = (g, s, x, y) => {
+  const m = g.measureText(s);
+  x -= m.width / 2;
+  const h = m.actualBoundingBoxAscent + m.actualBoundingBoxDescent;
+  y += h / 2;
+  g.fillText(s, x, y);
+};
+
+const getCenter = (bb) => {
+  return { x: bb.x + bb.width / 2, y: bb.y / bb.height / 2 };
+};
+
+const onResults = ((img, res) => {
+  const iw = img.videoWidth;
+  const ih = img.videoHeight;
+  const w = canvas.clientWidth;
+  if (w != canvas.width) {
+    canvas.width = w;
+  }
+  const h = canvas.width / iw * ih;
+  if (h != canvas.height) {
+    canvas.height = h;
+  }
+  g.save();
+  if (window.mirrormode && mirrormode.checked) {
+    g.scale(-1, 1);
+    g.translate(-w, 0);
+    /* // 180度回転
+    g.translate(w / 2, h / 2);
+    g.rotate(Math.PI);
+    g.translate(-w / 2, -h / 2);
+    */
+  }
+  g.clearRect(0, 0, w, h);
+  if (showimg.checked) {
+    g.drawImage(img, 0, 0, w, h);
+  }
+  const ix2sx = x => x / iw * w;
+  const iy2sy = y => y / ih * h;
+  for (const detect of res) {
+    g.strokeStyle = "black";
+    g.fillStyle = "rgba(255,255,255,0.9)";
+    g.lineWidth = 2;
+    g.beginPath();
+    const p = detect.cornerPoints;
+    g.moveTo(ix2sx(p[0].x), iy2sy(p[0].y));
+    for (let i = 1; i < p.length; i++) {
+      g.lineTo(ix2sx(p[i].x), iy2sy(p[i].y));
+    }
+    g.closePath();
+    g.fill();
+
+    g.beginPath();
+    g.arc(ix2sx(p[0].x), iy2sy(p[0].y), 8, 0, Math.PI * 2);
+    g.closePath();
+    g.fill();
+    g.stroke();
+
+    g.fillStyle = "black";
+    const s = detect.rawValue;
+    const b = detect.boundingBox;
+    const x = ix2sx(b.x + b.width / 2);
+    const y = iy2sy(b.y + b.height / 2);
+    const fh = ix2sx(b.width) / 8;
+    g.font = `${fh}px sans-serif`;
+    fillTextCenter(g, detect.format, x, y - fh * 1.0);
+    fillTextCenter(g, detect.rawValue, x, y + fh * 1.0);
+    //g.fillText("abc", x, y)
+  }
+  g.restore();
+});
+
+const camera = new Camera(videoElement, {
+  onFrame: async () => {
+    const img = videoElement;
+    const list = await detector.detect(img);
+    if (list.length > 0) {
+      console.log(list);
+    }
+    onResults(img, list);
+  },
+  width: 1280,
+  height: 720,
+  backcamera: backcameramode.checked,
+});
+camera.start();
+backcameramode.onchange = () => camera.flip();
+</script>
+
+<style>
+body {
+  font-family: sans-serif;
+  margin: 0;
+}
+h1, footer, .ctrl {
+  margin: 1em;
+}
+canvas {
+  width: 100vw;
+}
+</style>
+
+</body>
+</html>
